@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width">
+        <title>Peer-to-Peer System --- Sender</title>
+        <style>
+            body, html{
+                height: 100%;
+            }            
+        </style>
+    </head>
+    <body>
+        <table width="100%" height="100%" id="tbl">
+            <tr>
+                <td>
+                    <span style="font-weight: bold">ID: </span>
+                    <input type="text" id="receiver-id" title="Input the ID from receive.html">
+                    <button id="connect-button">Connect</button>
+                    <span id="status-txt"></span>
+                    <span>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                    <span style="cursor: pointer;color: black;" onclick="changeColor(this)">&#9646;</span>
+                    <span style="cursor: pointer;color: gray;" onclick="changeColor(this)">&#9646;</span>
+                    <span style="cursor: pointer;color: blue;" onclick="changeColor(this)">&#9646;</span>
+                    <span style="cursor: pointer;color: darkblue;" onclick="changeColor(this)">&#9646;</span>
+                    <span style="cursor: pointer;color: lightblue;" onclick="changeColor(this)">&#9646;</span>
+                    <span style="cursor: pointer;color: red;" onclick="changeColor(this)">&#9646;</span>
+                    <span style="cursor: pointer;color: darkred;" onclick="changeColor(this)">&#9646;</span>
+                    <span style="cursor: pointer;color: green;" onclick="changeColor(this)">&#9646;</span>
+                    <span style="cursor: pointer;color: darkgreen;" onclick="changeColor(this)">&#9646;</span>
+                    <span style="cursor: pointer;color: lightgreen;" onclick="changeColor(this)">&#9646;</span>
+                    <span style="cursor: pointer;color: yellow;" onclick="changeColor(this)">&#9646;</span>
+                    <span>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                    <span style="cursor: pointer;" onclick="changeLinewidth(this)" class="1">&#x258F;</span>
+                    <span style="cursor: pointer;" onclick="changeLinewidth(this)" class="3">&#x258E;</span>
+                    <span style="cursor: pointer;" onclick="changeLinewidth(this)" class="5">&#x258D;</span>
+                    <span style="cursor: pointer;" onclick="changeLinewidth(this)" class="7">&#x258C;</span>
+                    <button id="clear-button">Clear</button>
+                </td>
+            </tr>
+            <tr>
+                <td width="100%" height="100%" id="cvtd">
+                    <canvas id="cv" style="border: 1px solid gray;"></canvas>
+                </td>
+            </tr>
+        </table>
+
+        <script src="https://cdn.jsdelivr.net/npm/peerjs@1.2.0/dist/peerjs.min.js"></script>
+        <script type="text/javascript">
+            var lastPeerId = null;
+            var peer = null; // own peer object
+            var conn = null;
+            var recvIdInput = document.getElementById("receiver-id");
+            var connectButton = document.getElementById("connect-button");
+            var statusText = document.getElementById("status-txt");
+            var clearButton = document.getElementById("clear-button");
+            
+            cv.width = Math.floor(cvtd.getBoundingClientRect().width);
+            cv.height = Math.floor(cvtd.getBoundingClientRect().height);
+            var ctx = document.getElementById("cv").getContext("2d");
+
+            /**
+                * Create the Peer object for our end of the connection.
+                *
+                * Sets up callbacks that handle any events related to our
+                * peer object.
+                */
+            function initialize() {
+                // Create own peer object with connection to shared PeerJS server
+                peer = new Peer(null, {
+                    debug: 2
+                });
+
+                peer.on('open', function (id) {
+                    // Workaround for peer.reconnect deleting previous id
+                    if (peer.id === null) {
+                        console.log('Received null id from peer open');
+                        peer.id = lastPeerId;
+                    } else {
+                        lastPeerId = peer.id;
+                    }
+
+                    console.log('ID: ' + peer.id);
+                });
+                peer.on('connection', function (c) {
+                    // Disallow incoming connections
+                    c.on('open', function() {
+                        c.send("Sender does not accept incoming connections");
+                        setTimeout(function() { c.close(); }, 500);
+                    });
+                });
+                peer.on('disconnected', function () {
+                    statusText.innerHTML = "Connection lost. Please reconnect";
+                    console.log('Connection lost. Please reconnect');
+
+                    // Workaround for peer.reconnect deleting previous id
+                    peer.id = lastPeerId;
+                    peer._lastServerId = lastPeerId;
+                    peer.reconnect();
+                });
+                peer.on('close', function() {
+                    conn = null;
+                    statusText.innerHTML = "Connection destroyed. Please refresh";
+                    console.log('Connection destroyed');
+                });
+                peer.on('error', function (err) {
+                    console.log(err);
+                    alert('' + err);
+                });
+            };
+
+            /**
+                * Create the connection between the two Peers.
+                *
+                * Sets up callbacks that handle any events related to the
+                * connection and data received on it.
+                */
+            function join() {
+                // Close old connection
+                if (conn) {
+                    conn.close();
+                }
+
+                // Create connection to destination peer specified in the input field
+                conn = peer.connect(recvIdInput.value, {
+                    reliable: true
+                });
+
+                conn.on('open', function () {
+                    statusText.innerHTML = "Connected";
+                    console.log("Connected to: " + conn.peer);
+
+                    // Check URL params for comamnds that should be sent immediately
+                    var command = getUrlParam("command");
+                    if (command)
+                        conn.send(command);
+                });
+                // Handle incoming data (messages only since this is the signal sender)
+                conn.on('data', function (data) {
+
+                });
+                conn.on('close', function () {
+                    statusText.innerHTML = "Connection closed";
+                });
+            };
+
+            /**
+                * Get first "GET style" parameter from href.
+                * This enables delivering an initial command upon page load.
+                *
+                * Would have been easier to use location.hash.
+                */
+            function getUrlParam(name) {
+                name = name.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
+                var regexS = "[\\?&]" + name + "=([^&#]*)";
+                var regex = new RegExp(regexS);
+                var results = regex.exec(window.location.href);
+                if (results == null)
+                    return null;
+                else
+                    return results[1];
+            };
+
+            // Start peer connection on click
+            connectButton.addEventListener('click', join);
+            clearButton.addEventListener('click', clear);
+            
+            window.onresize = function(){
+                cv.width = 0;
+                cv.height = 0;
+                cv.width = Math.floor(cvtd.getBoundingClientRect().width);
+                cv.height = Math.floor(cvtd.getBoundingClientRect().height);
+                conn.send("clr");
+                conn.send("col,black");
+                conn.send("lw,1");
+            }
+
+            function clear(){
+                ctx.clearRect(0, 0, cv.width, cv.height);
+                conn.send("clr");
+            }
+
+            cv.addEventListener('mousedown', cvMD);
+            cv.addEventListener('mousemove', cvMM);
+            cv.addEventListener('mouseup', cvMU);
+
+            var x, y, drawing = false;
+
+            function cvMD(e){
+                drawing = true;
+                x = e.offsetX;
+                y = e.offsetY;
+                conn.send("sz," + cv.width + "," + cv.height);
+            }
+
+            function cvMM(e){
+                if(drawing){
+                    conn.send("d," + x + "," + y + "," + e.offsetX + "," + e.offsetY);
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(e.offsetX, e.offsetY);
+                    ctx.stroke();
+                    ctx.closePath();
+                    x = e.offsetX;
+                    y = e.offsetY;
+                }
+            }
+
+            function cvMU(e){
+                drawing = false;
+            }
+
+            function changeColor(el){
+                ctx.strokeStyle = el.style.color;
+                conn.send("col," + el.style.color);
+            }
+
+            function changeLinewidth(el){
+                ctx.lineWidth = el.className;
+                conn.send("lw," + el.className);
+            }
+
+            // Since all our callbacks are setup, start the process of obtaining an ID
+            initialize();
+        </script>
+    </body>
+</html>

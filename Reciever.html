@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width">
+        <title>Peer-to-Peer System --- Reciever</title>
+        <style>
+            body, html{
+                height: 100%;
+            }            
+        </style>
+    </head>
+    <body>
+        <table width="100%" height="100%" id="tbl">
+            <tr>
+                <td>
+                    ID: <span style="color:red" id="receiver-id" title="Copy this ID to the input on send.html."></span style="font-color:red">
+                     | <span id="status"></span>
+                </td>
+            </tr>
+            <tr>
+                <td width="100%" height="100%" id="cvtd">
+                    <canvas id="cv" style="border: 1px solid gray;"></canvas>
+                </td>
+            </tr>
+        </table>
+
+        <script src="https://cdn.jsdelivr.net/npm/peerjs@1.2.0/dist/peerjs.min.js"></script>
+        <script type="text/javascript">
+            (function () {
+
+                var lastPeerId = null;
+                var peer = null; // Own peer object
+                var peerId = null;
+                var conn = null;
+                var recvId = document.getElementById("receiver-id");
+                var status = document.getElementById("status");
+
+                cv.width = Math.floor(cvtd.getBoundingClientRect().width);
+                cv.height = Math.floor(cvtd.getBoundingClientRect().height);
+                var ctx = document.getElementById("cv").getContext("2d");
+
+                /**
+                 * Create the Peer object for our end of the connection.
+                 *
+                 * Sets up callbacks that handle any events related to our
+                 * peer object.
+                 */
+                 function initialize() {
+                    // Create own peer object with connection to shared PeerJS server
+                    peer = new Peer(null, {
+                        debug: 2
+                    });
+
+                    peer.on('open', function (id) {
+                        // Workaround for peer.reconnect deleting previous id
+                        if (peer.id === null) {
+                            console.log('Received null id from peer open');
+                            peer.id = lastPeerId;
+                        } else {
+                            lastPeerId = peer.id;
+                        }
+
+                        console.log('ID: ' + peer.id);
+                        recvId.innerHTML = peer.id;
+                        status.innerHTML = "Awaiting connection...";
+                    });
+                    peer.on('connection', function (c) {
+                        // Allow only a single connection
+                        if (conn && conn.open) {
+                            c.on('open', function() {
+                                c.send("Already connected to another client");
+                                setTimeout(function() { c.close(); }, 500);
+                            });
+                            return;
+                        }
+
+                        conn = c;
+                        console.log("Connected to: " + conn.peer);
+                        status.innerHTML = "Connected";
+                        ready();
+                    });
+                    peer.on('disconnected', function () {
+                        status.innerHTML = "Connection lost. Please reconnect";
+                        console.log('Connection lost. Please reconnect');
+
+                        // Workaround for peer.reconnect deleting previous id
+                        peer.id = lastPeerId;
+                        peer._lastServerId = lastPeerId;
+                        peer.reconnect();
+                    });
+                    peer.on('close', function() {
+                        conn = null;
+                        status.innerHTML = "Connection destroyed. Please refresh";
+                        console.log('Connection destroyed');
+                    });
+                    peer.on('error', function (err) {
+                        console.log(err);
+                        alert('' + err);
+                    });
+                };
+
+                /**
+                 * Triggered once a connection has been achieved.
+                 * Defines callbacks to handle incoming data and connection events.
+                 */
+                var SW, SH;
+                
+                function ready() {
+                    conn.on('data', function (data) {
+                        console.log("Data recieved " + data);
+                        var msg = data.split(',');
+                        var x1, y1, x2, y2;
+                        switch (msg[0]) {
+                            case 'd':
+                                x1 = Math.floor(msg[1] * cv.width / SW);
+                                y1 = Math.floor(msg[2] * cv.height / SH);
+                                x2 = Math.floor(msg[3] * cv.width / SW);
+                                y2 = Math.floor(msg[4] * cv.height / SH);
+                                ctx.beginPath();
+                                ctx.moveTo(x1, y1);
+                                ctx.lineTo(x2, y2);
+                                ctx.stroke();
+                                ctx.closePath();
+                                break;
+                            case 'sz':
+                                SW = msg[1];
+                                SH = msg[2];
+                                break;
+                            case 'clr':
+                                ctx.clearRect(0, 0, cv.width, cv.height);
+                                break;
+                            case 'col':
+                                ctx.strokeStyle = msg[1];
+                                break;
+                            case 'lw':
+                                ctx.lineWidth = msg[1];
+                                break;
+                            default:
+                                break;
+                        };
+                    });
+                    conn.on('close', function () {
+                        status.innerHTML = "Connection reset<br>Awaiting connection...";
+                        conn = null;
+                    });
+                }
+
+                window.onresize = function(){
+                    cv.width = 0;
+                    cv.height = 0;
+                    cv.width = Math.floor(cvtd.getBoundingClientRect().width);
+                    cv.height = Math.floor(cvtd.getBoundingClientRect().height);
+                }
+
+                initialize();
+            })();
+        </script>
+    </body>
+</html>
